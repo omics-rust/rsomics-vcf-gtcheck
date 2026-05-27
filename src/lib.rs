@@ -19,7 +19,7 @@ fn open_maybe_gz(path: &Path) -> Result<Box<dyn Read>> {
     // Prepend the already-read bytes before the still-buffered remainder
     let chain = std::io::Cursor::new(peek[..n].to_vec()).chain(buf);
     if is_gz {
-        Ok(Box::new(flate2::read::GzDecoder::new(chain)))
+        Ok(Box::new(flate2::read::MultiGzDecoder::new(chain)))
     } else {
         Ok(Box::new(chain))
     }
