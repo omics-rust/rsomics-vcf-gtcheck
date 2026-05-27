@@ -16,16 +16,32 @@ fn bcftools_available() -> bool {
         .unwrap_or(false)
 }
 
-fn bcftools_supports_no_hwe_prob() -> bool {
+/// Returns true only when bcftools produces non-empty stdout for a minimal gtcheck run using
+/// --no-HWE-prob. Some older bcftools releases recognise the flag but emit nothing to stdout,
+/// making the oracle empty and the test vacuously false-pass against the wrong answer.
+fn bcftools_no_hwe_prob_produces_output() -> bool {
+    let dir = tempfile::TempDir::new().unwrap();
+    let vcf_path = dir.path().join("probe.vcf");
+    std::fs::write(
+        &vcf_path,
+        concat!(
+            "##fileformat=VCFv4.2\n",
+            "##FILTER=<ID=PASS,Description=\"All filters passed\">\n",
+            "##contig=<ID=chr1,length=1000>\n",
+            "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n",
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\ts1\ts2\n",
+            "chr1\t1\t.\tA\tG\t50\tPASS\t.\tGT\t0/0\t1/1\n",
+        ),
+    )
+    .expect("write probe vcf");
     let Ok(out) = Command::new("bcftools")
-        .args(["gtcheck", "--help"])
+        .args(["gtcheck", "-u", "GT", "-E", "0", "--no-HWE-prob"])
+        .arg(&vcf_path)
         .output()
     else {
         return false;
     };
-    let text =
-        String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
-    text.contains("no-HWE-prob")
+    !out.stdout.is_empty()
 }
 
 fn write_test_vcf(dir: &TempDir, name: &str, content: &str) -> PathBuf {
@@ -89,8 +105,8 @@ fn cross_check_gt_raw() {
         eprintln!("skipping: bcftools not found");
         return;
     }
-    if !bcftools_supports_no_hwe_prob() {
-        eprintln!("skipping: bcftools does not support --no-HWE-prob");
+    if !bcftools_no_hwe_prob_produces_output() {
+        eprintln!("skipping: bcftools --no-HWE-prob produces no usable stdout on this version");
         return;
     }
 
