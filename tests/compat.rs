@@ -157,15 +157,20 @@ fn fails_loud_on_no_samples() {
 /// re-derives every golden and asserts ours still matches the freshly produced answer.
 #[test]
 fn live_oracle_matches_goldens() {
-    let have_bcftools = Command::new("bcftools")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-    if !have_bcftools {
-        eprintln!("skipping live oracle: bcftools not found");
+    // gtcheck output is version-sensitive (the discordance model and HWE prior
+    // have changed across releases), so the committed goldens are pinned to the
+    // bcftools they were produced with. Only re-derive live when the installed
+    // bcftools matches that version; on any other host (a CI runner with an
+    // older bcftools) the committed-golden tests remain the authoritative gate.
+    const GOLDEN_BCFTOOLS: &str = "1.23";
+    let version = Command::new("bcftools").arg("--version").output().ok();
+    let matches_version = version
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .and_then(|v| v.lines().next().map(str::to_owned))
+        .is_some_and(|line| line.contains(GOLDEN_BCFTOOLS));
+    if !matches_version {
+        eprintln!("skipping live oracle: bcftools {GOLDEN_BCFTOOLS} not found");
         return;
     }
     // Cross-check reads plain VCF directly; the -g cases need bgzip+index for bcftools.
