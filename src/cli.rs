@@ -4,7 +4,7 @@ use rsomics_help::{Example, FlagSpec, HelpSpec, Origin, Section};
 use std::io;
 use std::path::PathBuf;
 
-use rsomics_vcf_gtcheck::{GtcheckArgs, GtcheckMode, run_gtcheck};
+use rsomics_vcf_gtcheck::{GtcheckArgs, GtcheckMode, Report, compute, write_text};
 
 pub const META: ToolMeta = ToolMeta {
     name: env!("CARGO_PKG_NAME"),
@@ -48,7 +48,7 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn execute(self) -> Result<()> {
+    pub fn execute(&self) -> Result<Report> {
         let args = GtcheckArgs {
             error_prob: self.error_probability,
             no_hwe_prob: self.no_hwe_prob,
@@ -56,22 +56,24 @@ impl Cli {
             use_gt: self.use_gt,
         };
 
-        let stdout = io::stdout();
-        let mut out = io::BufWriter::new(stdout.lock());
-
-        match &self.genotypes {
-            Some(gt_path) => {
-                let mode = GtcheckMode::QueryVsGt {
+        let report = match &self.genotypes {
+            Some(gt_path) => compute(
+                &GtcheckMode::QueryVsGt {
                     query: &self.input,
                     gt: gt_path,
-                };
-                run_gtcheck(&mode, &args, &mut out)
-            }
-            None => {
-                let mode = GtcheckMode::CrossCheck(&self.input);
-                run_gtcheck(&mode, &args, &mut out)
-            }
+                },
+                &args,
+            )?,
+            None => compute(&GtcheckMode::CrossCheck(&self.input), &args)?,
+        };
+
+        if !self.common.json {
+            let stdout = io::stdout();
+            let mut out = io::BufWriter::new(stdout.lock());
+            write_text(&report, &mut out)?;
         }
+
+        Ok(report)
     }
 }
 
@@ -85,7 +87,16 @@ impl Tool for Cli {
     }
 
     fn execute(self) -> Result<()> {
-        self.execute()
+        Cli::execute(&self)?;
+        Ok(())
+    }
+
+    // The default `run` discards the body's value, so `--json` would emit
+    // `result: null`. Override to carry the populated Report into the envelope
+    // while leaving the non-json path (text table on stdout) intact.
+    fn run(self) -> std::process::ExitCode {
+        let common = self.common().clone();
+        rsomics_common::run(&common, Self::meta(), move || Cli::execute(&self))
     }
 }
 

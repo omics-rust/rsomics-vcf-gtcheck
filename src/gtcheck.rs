@@ -389,7 +389,51 @@ impl PairStats {
     }
 }
 
+/// One DCv2 pair row: the same fields the text table prints. `discordance` is the raw abstract
+/// score (soft likelihood sum under -E>0) or the raw mismatch count (-E 0); the text renders it via
+/// `fmt_e` or as an integer respectively. `avg_neg_log_hwe` and `n_matching` are already adjusted
+/// for `--no-HWE-prob`, matching the text columns exactly.
+#[derive(serde::Serialize)]
+pub struct PairRow {
+    pub query_sample: String,
+    pub genotyped_sample: String,
+    pub discordance: f64,
+    pub avg_neg_log_hwe: f64,
+    pub n_sites_compared: u32,
+    pub n_matching: u32,
+}
+
+/// The full gtcheck result: the INFO stat counters plus the DCv2 discordance rows — the same data
+/// the text table prints, carried into the `--json` envelope.
+#[derive(serde::Serialize)]
+pub struct Report {
+    pub sites_compared: u32,
+    pub sites_skipped_no_match: u32,
+    pub sites_skipped_multiallelic: u32,
+    pub sites_skipped_monoallelic: u32,
+    pub sites_skipped_no_data: u32,
+    pub sites_skipped_gt_not_diploid: u32,
+    pub sites_skipped_pl_not_diploid: u32,
+    pub sites_skipped_filtering_expression: u32,
+    pub sites_used_pl_vs_pl: u32,
+    pub sites_used_pl_vs_gt: u32,
+    pub sites_used_gt_vs_pl: u32,
+    pub sites_used_gt_vs_gt: u32,
+    pub pairs: Vec<PairRow>,
+    /// Selects the text discordance rendering (fmt_e vs integer); not part of the JSON payload.
+    #[serde(skip)]
+    error_model: bool,
+}
+
+/// Computes the report, then writes today's text table. Preserved for callers that want the
+/// combined behaviour; the binary uses `compute` + `write_text` so it can suppress text under
+/// `--json`.
 pub fn run_gtcheck(mode: &GtcheckMode<'_>, args: &GtcheckArgs, out: &mut impl Write) -> Result<()> {
+    let report = compute(mode, args)?;
+    write_text(&report, out)
+}
+
+pub fn compute(mode: &GtcheckMode<'_>, args: &GtcheckArgs) -> Result<Report> {
     let use_error_model = args.error_prob > 0;
     let neg_log_e = if use_error_model {
         // -ln(eprob), eprob = 10^(-0.1*E)
@@ -615,47 +659,151 @@ pub fn run_gtcheck(mode: &GtcheckMode<'_>, args: &GtcheckArgs, out: &mut impl Wr
         }
     }
 
-    write_all(out, format!("INFO\tsites-compared\t{ncmp}\n").as_bytes())?;
+    let qry_samples = &qry_tbl.samples;
+    let gt_samples = &gt_tbl.samples;
+
+    let make_row = |qname: &str, gname: &str, ps: &PairStats| -> PairRow {
+        let hwe_avg = if !args.no_hwe_prob && ps.nmatch > 0 {
+            ps.hwe_prob / ps.nmatch as f64
+        } else {
+            0.0
+        };
+        let nmatch_col = if args.no_hwe_prob { 0 } else { ps.nmatch };
+        let disc = if use_error_model {
+            ps.pdiff
+        } else {
+            ps.ndiff as f64
+        };
+        PairRow {
+            query_sample: qname.to_string(),
+            genotyped_sample: gname.to_string(),
+            discordance: disc,
+            avg_neg_log_hwe: hwe_avg,
+            n_sites_compared: ps.ncnt,
+            n_matching: nmatch_col,
+        }
+    };
+
+    let mut pairs: Vec<PairRow> = Vec::new();
+    if cross_check {
+        let mut idx = 0usize;
+        for (i, sname_i) in qry_samples.iter().enumerate().skip(1) {
+            for sname_j in &qry_samples[..i] {
+                pairs.push(make_row(sname_i, sname_j, &pairs_stats[idx]));
+                idx += 1;
+            }
+        }
+    } else {
+        for (i, qsname) in qry_samples.iter().enumerate() {
+            for (j, gtsname) in gt_samples.iter().enumerate() {
+                pairs.push(make_row(qsname, gtsname, &pairs_stats[i * ngt + j]));
+            }
+        }
+    }
+
+    Ok(Report {
+        sites_compared: ncmp,
+        sites_skipped_no_match: nskip_no_match,
+        sites_skipped_multiallelic: nskip_not_ba,
+        sites_skipped_monoallelic: nskip_mono,
+        sites_skipped_no_data: nskip_no_data,
+        sites_skipped_gt_not_diploid: nskip_dip[1],
+        sites_skipped_pl_not_diploid: nskip_dip[0],
+        sites_skipped_filtering_expression: 0,
+        sites_used_pl_vs_pl: nused[0][0],
+        sites_used_pl_vs_gt: nused[0][1],
+        sites_used_gt_vs_pl: nused[1][0],
+        sites_used_gt_vs_gt: nused[1][1],
+        pairs,
+        error_model: use_error_model,
+    })
+}
+
+pub fn write_text(report: &Report, out: &mut impl Write) -> Result<()> {
     write_all(
         out,
-        format!("INFO\tsites-skipped-no-match\t{nskip_no_match}\n").as_bytes(),
+        format!("INFO\tsites-compared\t{}\n", report.sites_compared).as_bytes(),
     )?;
     write_all(
         out,
-        format!("INFO\tsites-skipped-multiallelic\t{nskip_not_ba}\n").as_bytes(),
+        format!(
+            "INFO\tsites-skipped-no-match\t{}\n",
+            report.sites_skipped_no_match
+        )
+        .as_bytes(),
     )?;
     write_all(
         out,
-        format!("INFO\tsites-skipped-monoallelic\t{nskip_mono}\n").as_bytes(),
+        format!(
+            "INFO\tsites-skipped-multiallelic\t{}\n",
+            report.sites_skipped_multiallelic
+        )
+        .as_bytes(),
     )?;
     write_all(
         out,
-        format!("INFO\tsites-skipped-no-data\t{nskip_no_data}\n").as_bytes(),
+        format!(
+            "INFO\tsites-skipped-monoallelic\t{}\n",
+            report.sites_skipped_monoallelic
+        )
+        .as_bytes(),
     )?;
     write_all(
         out,
-        format!("INFO\tsites-skipped-GT-not-diploid\t{}\n", nskip_dip[1]).as_bytes(),
+        format!(
+            "INFO\tsites-skipped-no-data\t{}\n",
+            report.sites_skipped_no_data
+        )
+        .as_bytes(),
     )?;
     write_all(
         out,
-        format!("INFO\tsites-skipped-PL-not-diploid\t{}\n", nskip_dip[0]).as_bytes(),
+        format!(
+            "INFO\tsites-skipped-GT-not-diploid\t{}\n",
+            report.sites_skipped_gt_not_diploid
+        )
+        .as_bytes(),
+    )?;
+    write_all(
+        out,
+        format!(
+            "INFO\tsites-skipped-PL-not-diploid\t{}\n",
+            report.sites_skipped_pl_not_diploid
+        )
+        .as_bytes(),
     )?;
     write_all(out, b"INFO\tsites-skipped-filtering-expression\t0\n")?;
     write_all(
         out,
-        format!("INFO\tsites-used-PL-vs-PL\t{}\n", nused[0][0]).as_bytes(),
+        format!(
+            "INFO\tsites-used-PL-vs-PL\t{}\n",
+            report.sites_used_pl_vs_pl
+        )
+        .as_bytes(),
     )?;
     write_all(
         out,
-        format!("INFO\tsites-used-PL-vs-GT\t{}\n", nused[0][1]).as_bytes(),
+        format!(
+            "INFO\tsites-used-PL-vs-GT\t{}\n",
+            report.sites_used_pl_vs_gt
+        )
+        .as_bytes(),
     )?;
     write_all(
         out,
-        format!("INFO\tsites-used-GT-vs-PL\t{}\n", nused[1][0]).as_bytes(),
+        format!(
+            "INFO\tsites-used-GT-vs-PL\t{}\n",
+            report.sites_used_gt_vs_pl
+        )
+        .as_bytes(),
     )?;
     write_all(
         out,
-        format!("INFO\tsites-used-GT-vs-GT\t{}\n", nused[1][1]).as_bytes(),
+        format!(
+            "INFO\tsites-used-GT-vs-GT\t{}\n",
+            report.sites_used_gt_vs_gt
+        )
+        .as_bytes(),
     )?;
     write_all(
         out,
@@ -676,46 +824,24 @@ pub fn run_gtcheck(mode: &GtcheckMode<'_>, args: &GtcheckArgs, out: &mut impl Wr
           #DCv2\t[2]Query Sample\t[3]Genotyped Sample\t[4]Discordance\t[5]Average -log P(HWE)\t[6]Number of sites compared\t[7]Number of matching genotypes\n",
     )?;
 
-    let qry_samples = &qry_tbl.samples;
-    let gt_samples = &gt_tbl.samples;
-
-    let write_row = |out: &mut dyn Write, qname: &str, gname: &str, ps: &PairStats| -> Result<()> {
-        let hwe_avg = if !args.no_hwe_prob && ps.nmatch > 0 {
-            ps.hwe_prob / ps.nmatch as f64
+    for row in &report.pairs {
+        let disc = if report.error_model {
+            fmt_e(row.discordance)
         } else {
-            0.0
-        };
-        let nmatch_col = if args.no_hwe_prob { 0 } else { ps.nmatch };
-        let disc = if use_error_model {
-            fmt_e(ps.pdiff)
-        } else {
-            ps.ndiff.to_string()
+            (row.discordance as u32).to_string()
         };
         write_all(
             out,
             format!(
-                "DCv2\t{qname}\t{gname}\t{disc}\t{}\t{}\t{nmatch_col}\n",
-                fmt_e(hwe_avg),
-                ps.ncnt,
+                "DCv2\t{}\t{}\t{disc}\t{}\t{}\t{}\n",
+                row.query_sample,
+                row.genotyped_sample,
+                fmt_e(row.avg_neg_log_hwe),
+                row.n_sites_compared,
+                row.n_matching,
             )
             .as_bytes(),
-        )
-    };
-
-    if cross_check {
-        let mut idx = 0usize;
-        for (i, sname_i) in qry_samples.iter().enumerate().skip(1) {
-            for sname_j in &qry_samples[..i] {
-                write_row(out, sname_i, sname_j, &pairs_stats[idx])?;
-                idx += 1;
-            }
-        }
-    } else {
-        for (i, qsname) in qry_samples.iter().enumerate() {
-            for (j, gtsname) in gt_samples.iter().enumerate() {
-                write_row(out, qsname, gtsname, &pairs_stats[i * ngt + j])?;
-            }
-        }
+        )?;
     }
 
     Ok(())

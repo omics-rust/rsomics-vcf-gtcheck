@@ -6,7 +6,7 @@ use rsomics_common::{Result, RsomicsError};
 
 pub mod gtcheck;
 
-pub use gtcheck::{GtcheckArgs, GtcheckMode, run_gtcheck};
+pub use gtcheck::{GtcheckArgs, GtcheckMode, PairRow, Report, compute, run_gtcheck, write_text};
 
 fn open_maybe_gz(path: &Path) -> Result<Box<dyn Read>> {
     let file = File::open(path)
