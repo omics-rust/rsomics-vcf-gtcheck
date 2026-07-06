@@ -1,0 +1,15 @@
+INFO	sites-compared	2
+INFO	sites-skipped-no-match	0
+INFO	sites-skipped-multiallelic	0
+INFO	sites-skipped-monoallelic	0
+INFO	sites-skipped-no-data	0
+INFO	sites-skipped-GT-not-diploid	2
+INFO	sites-skipped-PL-not-diploid	0
+INFO	sites-skipped-filtering-expression	0
+INFO	sites-used-PL-vs-PL	0
+INFO	sites-used-PL-vs-GT	0
+INFO	sites-used-GT-vs-PL	0
+INFO	sites-used-GT-vs-GT	2
+DCv2	B	A	9.210340e+00	8.109302e-01	2	1
+DCv2	C	A	2.763102e+01	0.000000e+00	2	0
+DCv2	C	B	1.842068e+01	0.000000e+00	2	0

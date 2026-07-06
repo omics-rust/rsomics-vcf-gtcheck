@@ -1,0 +1,15 @@
+INFO	sites-compared	5
+INFO	sites-skipped-no-match	0
+INFO	sites-skipped-multiallelic	0
+INFO	sites-skipped-monoallelic	0
+INFO	sites-skipped-no-data	0
+INFO	sites-skipped-GT-not-diploid	0
+INFO	sites-skipped-PL-not-diploid	0
+INFO	sites-skipped-filtering-expression	0
+INFO	sites-used-PL-vs-PL	0
+INFO	sites-used-PL-vs-GT	0
+INFO	sites-used-GT-vs-PL	0
+INFO	sites-used-GT-vs-GT	5
+DCv2	sample2	sample1	4.605170e+01	8.109302e-01	5	2
+DCv2	sample3	sample1	5.526204e+01	0.000000e+00	5	0
+DCv2	sample3	sample2	4.605170e+01	0.000000e+00	5	0

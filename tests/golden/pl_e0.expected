@@ -1,0 +1,13 @@
+INFO	sites-compared	4
+INFO	sites-skipped-no-match	0
+INFO	sites-skipped-multiallelic	0
+INFO	sites-skipped-monoallelic	0
+INFO	sites-skipped-no-data	0
+INFO	sites-skipped-GT-not-diploid	0
+INFO	sites-skipped-PL-not-diploid	0
+INFO	sites-skipped-filtering-expression	0
+INFO	sites-used-PL-vs-PL	4
+INFO	sites-used-PL-vs-GT	0
+INFO	sites-used-GT-vs-PL	0
+INFO	sites-used-GT-vs-GT	0
+DCv2	Y	X	0	1.732868e-01	4	4

@@ -1,0 +1,16 @@
+INFO	sites-compared	4
+INFO	sites-skipped-no-match	0
+INFO	sites-skipped-multiallelic	0
+INFO	sites-skipped-monoallelic	0
+INFO	sites-skipped-no-data	0
+INFO	sites-skipped-GT-not-diploid	0
+INFO	sites-skipped-PL-not-diploid	0
+INFO	sites-skipped-filtering-expression	0
+INFO	sites-used-PL-vs-PL	0
+INFO	sites-used-PL-vs-GT	4
+INFO	sites-used-GT-vs-PL	0
+INFO	sites-used-GT-vs-GT	0
+DCv2	Q1	S1	1.103639e+00	7.253123e-01	4	4
+DCv2	Q1	S2	6.860102e+00	2.670628e-01	4	2
+DCv2	Q1	S3	1.514941e+01	0.000000e+00	4	0
+DCv2	Q1	S4	3.406224e+00	5.049849e-01	4	3

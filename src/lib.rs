@@ -29,6 +29,6 @@ pub(crate) fn open_vcf_reader(path: &Path) -> Result<Box<dyn BufRead>> {
     Ok(Box::new(BufReader::new(open_maybe_gz(path)?)))
 }
 
-pub(crate) fn write_all(w: &mut impl Write, buf: &[u8]) -> Result<()> {
+pub(crate) fn write_all(w: &mut (impl Write + ?Sized), buf: &[u8]) -> Result<()> {
     w.write_all(buf).map_err(RsomicsError::Io)
 }
